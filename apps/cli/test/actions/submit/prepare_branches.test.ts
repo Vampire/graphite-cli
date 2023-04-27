@@ -6,6 +6,7 @@ import { BasicScene } from '../../lib/scenes/basic_scene';
 import { configureTest } from '../../lib/utils/configure_test';
 import fs from 'fs-extra';
 import { TPRSubmissionInfo } from '../../../src/actions/submit/submit_prs';
+import { PrMode } from '../../../src/commands/shared-commands/submit';
 
 use(chaiAsPromised);
 
@@ -52,6 +53,7 @@ describe(`(${scene}): correctly get PR information for branches`, function () {
           reviewers: undefined,
           select: false,
           always: false,
+          prMode: PrMode.Gt,
         },
         context
       )

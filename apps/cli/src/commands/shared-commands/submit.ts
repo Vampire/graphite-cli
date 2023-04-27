@@ -2,6 +2,12 @@ import yargs from 'yargs';
 
 export const command = 'submit';
 
+export enum PrMode {
+  PushOnly = 'push-only',
+  Gh = 'gh',
+  Gt = 'gt',
+}
+
 /**
  * Primary interaction patterns:
  *
@@ -93,6 +99,11 @@ export const args = {
       'Always push updates, even if the branch has not changed. Can be helpful for fixing an inconsistent Graphite stack view on Web/GitHub resulting from downtime/a bug.',
     type: 'boolean',
     default: false,
+  },
+  'pr-mode': {
+    describe: `Only push the branches but do not create or update PRs ("${PrMode.PushOnly}"), output GitHub CLI commands to create PRs ("${PrMode.Gh}"), or let Graphite handle your PRs ("${PrMode.Gt}")`,
+    choices: Object.values(PrMode),
+    default: PrMode.PushOnly,
   },
 } as const;
 

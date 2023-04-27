@@ -1,12 +1,14 @@
 import chalk from 'chalk';
 import prompts from 'prompts';
 import { TContext } from '../../lib/context';
+import { PrMode } from '../../commands/shared-commands/submit';
 import { ExitFailedError, KilledError } from '../../lib/errors';
 import { syncPrInfo } from '../sync_pr_info';
 
 export async function validateBranchesToSubmit(
   branchNames: string[],
-  context: TContext
+  context: TContext,
+  prMode: PrMode
 ): Promise<string[]> {
   const syncPrInfoPromise = syncPrInfo(branchNames, context);
 
@@ -23,7 +25,9 @@ export async function validateBranchesToSubmit(
   }
 
   await syncPrInfoPromise;
-  await validateNoMergedOrClosedBranches(branchNames, context);
+  if (prMode == PrMode.Gt) {
+    await validateNoMergedOrClosedBranches(branchNames, context);
+  }
   return branchNames;
 }
 

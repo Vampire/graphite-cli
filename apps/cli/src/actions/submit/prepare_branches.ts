@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { TContext } from '../../lib/context';
 import { TBranchPRInfo } from '../../lib/engine/metadata_ref';
+import { PrMode } from '../../commands/shared-commands/submit';
 import { editPRBody, getPRBody } from './pr_body';
 import { getPRDraftStatus } from './pr_draft';
 import { getPRTitle } from './pr_title';
@@ -37,6 +38,7 @@ export async function getPRInfoForBranches(
     reviewers: string | undefined;
     select: boolean;
     always: boolean;
+    prMode: PrMode;
   },
   context: TContext
 ): Promise<TPRSubmissionInfo> {
@@ -52,6 +54,7 @@ export async function getPRInfoForBranches(
         select: args.select,
         editPRFieldsInline: args.editPRFieldsInline,
         always: args.always,
+        prMode: args.prMode,
       },
       context
     );
@@ -91,6 +94,7 @@ export async function getPRInfoForBranches(
                 draft: args.draft,
                 publish: args.publish,
                 reviewers: args.reviewers,
+                prMode: args.prMode,
               },
               context
             )),
@@ -111,6 +115,7 @@ async function getPRAction(
     always: boolean;
     select: boolean;
     editPRFieldsInline: boolean | undefined;
+    prMode: PrMode;
   },
   context: TContext
 ): Promise<TPRSubmissionAction | undefined> {
@@ -170,6 +175,7 @@ async function getPRCreationInfo(
     draft: boolean;
     publish: boolean;
     reviewers: string | undefined;
+    prMode: PrMode;
   },
   context: TContext
 ): Promise<{
@@ -192,21 +198,27 @@ async function getPRCreationInfo(
   const submitInfo: TBranchPRInfo = {};
 
   try {
-    submitInfo.title = await getPRTitle(
-      {
-        branchName: args.branchName,
-        editPRFieldsInline: args.editPRFieldsInline,
-      },
-      context
-    );
+    submitInfo.title =
+      args.prMode == PrMode.PushOnly
+        ? ''
+        : await getPRTitle(
+            {
+              branchName: args.branchName,
+              editPRFieldsInline: args.editPRFieldsInline,
+            },
+            context
+          );
 
-    submitInfo.body = await getPRBody(
-      {
-        branchName: args.branchName,
-        editPRFieldsInline: args.editPRFieldsInline,
-      },
-      context
-    );
+    submitInfo.body =
+      args.prMode == PrMode.PushOnly
+        ? ''
+        : await getPRBody(
+            {
+              branchName: args.branchName,
+              editPRFieldsInline: args.editPRFieldsInline,
+            },
+            context
+          );
   } finally {
     // Save locally in case this command fails
     context.engine.upsertPrInfo(args.branchName, submitInfo);
@@ -214,11 +226,12 @@ async function getPRCreationInfo(
 
   const reviewers = await getReviewers(args.reviewers);
 
-  const createAsDraft = args.publish
-    ? false
-    : args.draft || !context.interactive
-    ? true
-    : await getPRDraftStatus(context);
+  const createAsDraft =
+    args.publish || args.prMode == PrMode.PushOnly
+      ? false
+      : args.draft || !context.interactive
+      ? true
+      : await getPRDraftStatus(context);
 
   return {
     title: submitInfo.title,

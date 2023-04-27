@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import prompts from 'prompts';
 import { TContext } from '../../lib/context';
 import { TScopeSpec } from '../../lib/engine/scope_spec';
+import { PrMode } from '../../commands/shared-commands/submit';
 import { ExitFailedError, KilledError } from '../../lib/errors';
 import { CommandFailedError } from '../../lib/git/runner';
 import { cliAuthPrecondition } from '../../lib/preconditions';
@@ -24,6 +25,7 @@ export async function submitAction(
     forcePush: boolean;
     select: boolean;
     always: boolean;
+    prMode: PrMode;
   },
   context: TContext
 ): Promise<void> {
@@ -34,7 +36,10 @@ export async function submitAction(
     );
   }
   const populateRemoteShasPromise = context.engine.populateRemoteShas();
-  const cliAuthToken = cliAuthPrecondition(context);
+  let cliAuthToken = ``;
+  if (args.prMode == PrMode.Gt) {
+    cliAuthToken = cliAuthPrecondition(context);
+  }
   if (args.dryRun) {
     context.splog.info(
       chalk.yellow(
@@ -49,14 +54,16 @@ export async function submitAction(
     args.editPRFieldsInline = false;
     args.reviewers = undefined;
 
-    context.splog.info(
-      `Running in non-interactive mode. Inline prompts to fill PR fields will be skipped${
-        !(args.draft || args.publish)
-          ? ' and new PRs will be created in draft mode'
-          : ''
-      }.`
-    );
-    context.splog.newline();
+    if (args.prMode != PrMode.PushOnly) {
+      context.splog.info(
+        `Running in non-interactive mode. Inline prompts to fill PR fields will be skipped${
+          !(args.draft || args.publish)
+            ? ' and new PRs will be created in draft mode'
+            : ''
+        }.`
+      );
+      context.splog.newline();
+    }
   }
 
   const allBranchNames = context.engine
@@ -73,13 +80,19 @@ export async function submitAction(
     )
   );
   context.splog.newline();
-  await validateBranchesToSubmit(branchNames, context);
+  await validateBranchesToSubmit(branchNames, context, args.prMode);
 
-  context.splog.info(
-    chalk.blueBright(
-      '✏️  Preparing to submit PRs for the following branches...'
-    )
-  );
+  if (args.prMode != PrMode.Gt) {
+    context.splog.info(
+      chalk.blueBright('✏️  Preparing to push the following branches...')
+    );
+  } else {
+    context.splog.info(
+      chalk.blueBright(
+        '✏️  Preparing to submit PRs for the following branches...'
+      )
+    );
+  }
   await populateRemoteShasPromise;
   const submissionInfos = await getPRInfoForBranches(
     {
@@ -92,6 +105,7 @@ export async function submitAction(
       dryRun: args.dryRun,
       select: args.select,
       always: args.always,
+      prMode: args.prMode,
     },
     context
   );
@@ -105,9 +119,13 @@ export async function submitAction(
     return;
   }
 
-  context.splog.info(
-    chalk.blueBright('📨 Pushing to remote and creating/updating PRs...')
-  );
+  if (args.prMode != PrMode.Gt) {
+    context.splog.info(chalk.blueBright('📨 Pushing to remote...'));
+  } else {
+    context.splog.info(
+      chalk.blueBright('📨 Pushing to remote and creating/updating PRs...')
+    );
+  }
 
   for (const submissionInfo of submissionInfos) {
     try {
@@ -130,10 +148,32 @@ export async function submitAction(
       throw err;
     }
 
-    await submitPullRequest(
-      { submissionInfo: [submissionInfo], cliAuthToken },
-      context
-    );
+    switch (String(args.prMode)) {
+      case PrMode.Gt:
+        await submitPullRequest(
+          { submissionInfo: [submissionInfo], cliAuthToken },
+          context
+        );
+        break;
+
+      case PrMode.Gh:
+        context.splog.info(
+          `gh pr create --base ${context.engine.trunk}${
+            submissionInfo.draft ? ' --draft' : ''
+          }${
+            submissionInfo.head
+              ? ` --head ${context.repoConfig.getRepoOwner()}:${
+                  submissionInfo.head
+                }`
+              : ''
+          }${
+            submissionInfo.title
+              ? ` --title '${submissionInfo.title.replace(/'/g, "'\\''")}'`
+              : ''
+          } --body '${submissionInfo.body?.replace(/'/g, "'\\''") ?? ''}'`
+        );
+        break;
+    }
   }
 
   if (!context.interactive) {
